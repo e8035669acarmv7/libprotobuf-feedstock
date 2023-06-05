@@ -20,9 +20,12 @@ source:
       - patches/0003-Enable-the-selection-of-system-provided-jsoncpp-1257.patch
       - patches/0004-always-look-for-shared-abseil-builds.patch
       - patches/0005-be-more-lenient-with-abseil-version.patch
+      - patches/0006-add-PROTOBUF_EXPORT-for-google-protobuf-io-SafeDoubl.patch
+      # backport https://github.com/protocolbuffers/protobuf/pull/12978
+      - patches/0007-use-namespaced-abseil-dll-imported-target-backport-12978.patch
 
 build:
-  number: 1
+  number: 3
 
 outputs:
   - name: libprotobuf
@@ -86,10 +89,11 @@ outputs:
         # binary
         - protoc --help
 
-        # more CMake integration (CMake uses its own FindProtobuf)
+        # more CMake integration
         - cd cmake_test
         - cmake -GNinja $CMAKE_ARGS .   # [unix]
         - cmake -GNinja %CMAKE_ARGS% .  # [win]
+        - cmake --build .
 
   - name: libprotobuf-static
     script: build-lib.sh   # [unix]
@@ -128,10 +132,11 @@ outputs:
         - if not exist %LIBRARY_LIB%\{{ each_lib }}-static.lib exit 1  # [win]
         {% endfor %}
 
-        # more CMake integration (CMake uses its own FindProtobuf)
+        # more CMake integration
         - cd cmake_test
         - cmake -GNinja $CMAKE_ARGS .   # [unix]
         - cmake -GNinja %CMAKE_ARGS% .  # [win]
+        - cmake --build .
 
 about:
   home: https://developers.google.com/protocol-buffers/
