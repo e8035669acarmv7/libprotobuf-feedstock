@@ -1,5 +1,5 @@
 # keep this without major version to let the bot pick it up
-{% set version = "23.2" %}
+{% set version = "23.4" %}
 # protobuf doesn't add the major version in the tag, it's defined per language in
 # https://github.com/protocolbuffers/protobuf/blob/main/version.json
 {% set major = "4" %}
@@ -12,24 +12,23 @@ package:
 
 source:
   - url: https://github.com/protocolbuffers/protobuf/archive/refs/tags/v{{ version.replace(".rc", "-rc") }}.tar.gz
-    sha256: 0b0395d34e000f1229679e10d984ed7913078f3dd7f26cf0476467f5e65716f4
+    sha256: a700a49470d301f1190a487a923b5095bf60f08f4ae4cac9f5f7c36883d17971
     patches:
       - patches/0001-use-consistent-cmake-location.patch
       - patches/0002-set-static-lib-extension-on-windows.patch
       # backport https://github.com/protocolbuffers/protobuf/pull/12577
       - patches/0003-Enable-the-selection-of-system-provided-jsoncpp-1257.patch
       - patches/0004-always-look-for-shared-abseil-builds.patch
-      - patches/0005-be-more-lenient-with-abseil-version.patch
-      - patches/0006-add-PROTOBUF_EXPORT-for-google-protobuf-io-SafeDoubl.patch
-      # backport https://github.com/protocolbuffers/protobuf/pull/12978
-      - patches/0007-use-namespaced-abseil-dll-imported-target-backport-12978.patch
+      # grpc_cpp_java_plugin links against otherwise internal symbols
+      - patches/0005-Export-functions-in-google-compiler-java-names.patch
+      - patches/0006-do-not-install-vendored-gmock.patch
 
 build:
-  number: 3
+  number: 5
 
 outputs:
   - name: libprotobuf
-    script: build-lib.sh   # [unix]
+    script: build-lib.sh  # [unix]
     script: build-lib.bat  # [win]
     build:
       run_exports:
@@ -54,6 +53,7 @@ outputs:
         - zlib
       run:
         - ucrt  # [win]
+        - __osx >={{ MACOSX_DEPLOYMENT_TARGET }}  # [osx and x86_64]
     test:
       requires:
         # cmake needs compiler to be able to run package detection, see
@@ -96,9 +96,13 @@ outputs:
         - cmake --build .
 
   - name: libprotobuf-static
-    script: build-lib.sh   # [unix]
+    script: build-lib.sh  # [unix]
     script: build-lib.bat  # [win]
     build:
+      always_include_files:
+        # Must overwrite the CMake metadata from shared libprotobuf
+        - lib/cmake/protobuf/           # [unix]
+        - Library/lib/cmake/protobuf/   # [win]
       ignore_run_exports_from:
         - jsoncpp
     requirements:
@@ -123,6 +127,7 @@ outputs:
         - {{ compiler('cxx') }}
         - cmake
         - ninja
+        - zlib
       files:
         - cmake_test/
       commands:
@@ -137,6 +142,23 @@ outputs:
         - cmake -GNinja $CMAKE_ARGS .   # [unix]
         - cmake -GNinja %CMAKE_ARGS% .  # [win]
         - cmake --build .
+
+  - name: libprotobuf-python-headers
+    script: build-pyheaders.sh  # [unix]
+    script: build-pyheaders.bat  # [win]
+    requirements:
+      build:
+        - rsync  # [unix]
+      host:
+        - {{ pin_subpackage('libprotobuf', exact=True) }}
+      run_constrained:
+        - libprotobuf {{ major ~ "." ~ version }}
+    test:
+      commands:
+        - test -f $PREFIX/include/google/protobuf/proto_api.h      # [unix]
+        - test -f $PREFIX/include/google/protobuf/pyext/message.h  # [unix]
+        - if not exist %LIBRARY_PREFIX%\include\google\protobuf\proto_api.h exit 1      # [win]
+        - if not exist %LIBRARY_PREFIX%\include\google\protobuf\pyext\message.h exit 1  # [win]
 
 about:
   home: https://developers.google.com/protocol-buffers/
