@@ -1,8 +1,16 @@
 # keep this without major version to let the bot pick it up
-{% set version = "23.4" %}
+{% set version = "27.2" %}
 # protobuf doesn't add the major version in the tag, it's defined per language in
 # https://github.com/protocolbuffers/protobuf/blob/main/version.json
-{% set major = "4" %}
+{% set major = "5" %}
+# pkg-config metadata sets yet another version format, not using the major version
+# but adding the rc number as a patch version, or 0 for regular releases
+{% set pkgconfig_ver = version.split(".")[0] ~ "." ~ version.split(".")[1] %}
+{% if version.split(".")[-1].startswith("rc") %}
+  {% set pkgconfig_ver = pkgconfig_ver ~ "." ~ version.split(".")[-1].replace("rc", "") %}
+{% else %}
+  {% set pkgconfig_ver = pkgconfig_ver ~ "." ~ "0" %}
+{% endif %}
 
 {% set libraries = ["libprotoc", "libprotobuf", "libprotobuf-lite"] %}
 
@@ -12,19 +20,19 @@ package:
 
 source:
   - url: https://github.com/protocolbuffers/protobuf/archive/refs/tags/v{{ version.replace(".rc", "-rc") }}.tar.gz
-    sha256: a700a49470d301f1190a487a923b5095bf60f08f4ae4cac9f5f7c36883d17971
+    sha256: e4ff2aeb767da6f4f52485c2e72468960ddfe5262483879ef6ad552e52757a77
     patches:
       - patches/0001-use-consistent-cmake-location.patch
       - patches/0002-set-static-lib-extension-on-windows.patch
-      # backport https://github.com/protocolbuffers/protobuf/pull/12577
-      - patches/0003-Enable-the-selection-of-system-provided-jsoncpp-1257.patch
-      - patches/0004-always-look-for-shared-abseil-builds.patch
+      - patches/0003-always-look-for-shared-abseil-builds.patch
       # grpc_cpp_java_plugin links against otherwise internal symbols
-      - patches/0005-Export-functions-in-google-compiler-java-names.patch
-      - patches/0006-do-not-install-vendored-gmock.patch
+      - patches/0004-do-not-install-vendored-gmock.patch
+      # skip annoyingly flaky test on windows, see
+      # https://github.com/protocolbuffers/protobuf/issues/8645
+      - patches/0005-disable-MapImplTest.RandomOrdering-due-to-flakiness.patch      # [win]
 
 build:
-  number: 5
+  number: 0
 
 outputs:
   - name: libprotobuf
@@ -37,10 +45,12 @@ outputs:
         # https://github.com/conda-forge/conda-forge-pinning-feedstock/issues/4075
         - {{ pin_subpackage('libprotobuf', max_pin='x.x.x') }}
       ignore_run_exports_from:
+        - gtest
         - jsoncpp
     requirements:
       build:
         - {{ compiler('c') }}
+        - {{ stdlib("c") }}
         - {{ compiler('cxx') }}
         - cmake
         - ninja
@@ -53,7 +63,6 @@ outputs:
         - zlib
       run:
         - ucrt  # [win]
-        - __osx >={{ MACOSX_DEPLOYMENT_TARGET }}  # [osx and x86_64]
     test:
       requires:
         # cmake needs compiler to be able to run package detection, see
@@ -61,6 +70,7 @@ outputs:
         - {{ compiler('cxx') }}
         - cmake
         - ninja
+        - pkg-config
       files:
         - cmake_test/
       commands:
@@ -80,11 +90,9 @@ outputs:
         - test -f ${PREFIX}/lib/cmake/protobuf/protobuf-config.cmake              # [unix]
         - if not exist %LIBRARY_LIB%\cmake\protobuf\protobuf-config.cmake exit 1  # [win]
 
-        # pkgconfig
-        - test -f ${PREFIX}/lib/pkgconfig/protobuf.pc                   # [unix]
-        - test -f ${PREFIX}/lib/pkgconfig/protobuf-lite.pc              # [unix]
-        - if not exist %LIBRARY_LIB%\pkgconfig\protobuf.pc exit 1       # [win]
-        - if not exist %LIBRARY_LIB%\pkgconfig\protobuf-lite.pc exit 1  # [win]
+        # pkg-config
+        - pkg-config --print-errors --exact-version "{{ pkgconfig_ver }}" protobuf
+        - pkg-config --print-errors --exact-version "{{ pkgconfig_ver }}" protobuf-lite
 
         # binary
         - protoc --help
@@ -108,6 +116,7 @@ outputs:
     requirements:
       build:
         - {{ compiler('c') }}
+        - {{ stdlib("c") }}
         - {{ compiler('cxx') }}
         - cmake
         - ninja
@@ -176,6 +185,8 @@ about:
 
 extra:
   recipe-maintainers:
+    - JohanMabille
+    - jjerphan
     - xylar
     - dopplershift
     - jakirkham
