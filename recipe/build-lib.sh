@@ -47,6 +47,7 @@ cmake -G "Ninja" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_CXX_STANDARD=17 \
     -Dprotobuf_ABSL_PROVIDER="package" \
+    -Dprotobuf_BUILD_LIBUPB=OFF \
     -Dprotobuf_BUILD_SHARED_LIBS=$CF_SHARED \
     -Dprotobuf_BUILD_TESTS=OFF \
     -Dprotobuf_JSONCPP_PROVIDER="package" \
